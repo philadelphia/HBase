@@ -96,7 +96,7 @@ public class HBaseTableAPITest {
 
 	}
 
-	
+	//add a blank line
 
 	public static void addFamilyToTable(String columnFamilyName)
 			throws MasterNotRunningException, ZooKeeperConnectionException,
