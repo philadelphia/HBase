@@ -15,6 +15,8 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.MasterNotRunningException;
 import org.apache.hadoop.hbase.ZooKeeperConnectionException;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -23,62 +25,57 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.BinaryComparator;
+import org.apache.hadoop.hbase.filter.BinaryPrefixComparator;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.PrefixFilter;
+import org.apache.hadoop.hbase.filter.QualifierFilter;
+import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 
 public class HBaseTableAPITest {
 	private final static String TABLE_NAME = "employee";
-	public static Configuration configuration = null;
-	public static HBaseAdmin hBaseAdmin = null;
+	private static Connection connection;
+	private static Configuration configuration = null;
+	private static HBaseAdmin hBaseAdmin = null;
+	private static HTable table = null;
+	
 
 	public static void main(String[] args) throws MasterNotRunningException,
 			ZooKeeperConnectionException, IOException {
-		// isTableExists("test");
-		// createTable("employee", "info");
-//		isTableExists("employee");
-//		printConfiguration();
-		// addFamilyToTable("Carrer");
-		// deleteFamilyToTable("Carrer");
-		// insert("employee", "002");
-//		 get("employee", "002");
-		// delete("employee","001");
-		// query("employee", "002");
-		// insertInBatch(tableName);
-		// deleteInBatch(tableName);
-		// get(tableName, "001");
-		// getInBatch(tableName);
-		// filterWithFamily("rk");
-		// scanTable(tableName);
-		isAutoFlush();
-		HTable table = new HTable(configuration, TABLE_NAME.getBytes());
-		HTableDescriptor des = table.getTableDescriptor();
-		System.out.println(des.getNameAsString());
-//		des.addFamily(new HColumnDescriptor("test".getBytes()));
-//		hBaseAdmin.enableTable(TABLE_NAME.getBytes());
-//		hBaseAdmin.modifyTable(TABLE_NAME.getBytes(), des);
-//		HColumnDescriptor[] dess = des.getColumnFamilies();
-//		for (HColumnDescriptor hColumnDescriptor : dess) {
-//			System.out.println(hColumnDescriptor);
-//		}
-//		System.out.println(des.getFamily("info".getBytes()));
-//		System.out.println(des.hasFamily("test".getBytes()));
-//		des.setReadOnly(false);
-		System.out.println(des.isReadOnly());
-		 insert("employee", "032");
-		 System.out.println(des.getMemStoreFlushSize());
+		init();
+		table = new HTable(configuration, TABLE_NAME.getBytes());
+//		createTable(TABLE_NAME, "info");
+//		initTable();
+//		scanTable(TABLE_NAME);
+		
+//		scanTable(TABLE_NAME,"1001", "1009");
+//		scanTable(TABLE_NAME,"1090");
+//		scanTableByFamily(TABLE_NAME,"info");
+//		scanTableByQualifier(TABLE_NAME,"info","age");
+//		Filter filter = new RowFilter(CompareOp.LESS_OR_EQUAL, new BinaryComparator(Bytes.toBytes("1004")));
+//		Filter filter = new RowFilter(CompareOp.EQUAL, new BinaryPrefixComparator(Bytes.toBytes("102")));
+		Filter filter = new QualifierFilter(CompareOp.EQUAL, new BinaryPrefixComparator(Bytes.toBytes("age")));
+		
+		scanTableByFilter(TABLE_NAME, filter);
+		
+		
+//		get(TABLE_NAME, "1010");
 		closeConnecton();
 		
 	}
 
 	public static void init() throws MasterNotRunningException,
 			ZooKeeperConnectionException, IOException {
-		configuration = HBaseConfiguration.create();
-		hBaseAdmin = new HBaseAdmin(configuration);
+		connection = ConnectionFactory.createConnection();
+		configuration = connection.getConfiguration();
+		hBaseAdmin = (HBaseAdmin) connection.getAdmin();
 
 	}
 
 	public static void closeConnecton() throws IOException {
+		table.close();
 		hBaseAdmin.close();
 	}
 
@@ -96,23 +93,10 @@ public class HBaseTableAPITest {
 			hBaseAdmin.createTable(hTableDescriptor);
 		}
 
-		closeConnecton();
 
 	}
 
-	public static void deleteTable(String tableName)
-			throws MasterNotRunningException, ZooKeeperConnectionException,
-			IOException {
-		init();
-		if (hBaseAdmin.tableExists(Bytes.toBytes(tableName))) {
-			hBaseAdmin.disableTable(Bytes.toBytes(tableName));
-			hBaseAdmin.deleteTable(tableName);
-
-		} else {
-			System.out.println(tableName + "does not exist");
-		}
-
-	}
+	
 
 	public static void addFamilyToTable(String columnFamilyName)
 			throws MasterNotRunningException, ZooKeeperConnectionException,
@@ -144,16 +128,31 @@ public class HBaseTableAPITest {
 
 	}
 
-	public static void isTableExists(String tableName) throws IOException {
-		init();
-		boolean flag = hBaseAdmin.tableExists(tableName.getBytes());
-		if (flag) {
-			System.out.println(tableName + " exists");
-		} else {
-			System.out.println(tableName + " does not  exists");
+	//init a table,insert some test data to this table
+	public static void initTable( ) throws IOException{
+		
+		List<Put> listPuts = new ArrayList<Put>();
+		for (int i = 0; i < 100; i++) {
+			Put put = new Put(String.valueOf(1000+i).getBytes());
+			put.addColumn("info".getBytes(), "name".getBytes(), String.valueOf(i).getBytes());
+			put.addColumn("info".getBytes(), "age".getBytes(), String.valueOf(i).getBytes());
+			put.addColumn("info".getBytes(), "addr".getBytes(),
+					("ChaoYang District"+String.valueOf(i)).getBytes());
+			if(i % 2 ==0){
+				put.addColumn("info".getBytes(), "gender".getBytes(), "Male".getBytes());
+			}else {
+				put.addColumn("info".getBytes(), "gender".getBytes(), "FeMale".getBytes());
+			}
+		
+			put.addColumn("info".getBytes(), "salary".getBytes(),
+					String.valueOf(10000+i).getBytes());
+			listPuts.add(put);
 		}
-
-	}
+		
+		table.put(listPuts);
+		
+	
+}
 
 	public static void insert(String tableName, String rowkey)
 			throws IOException {
@@ -197,6 +196,88 @@ public class HBaseTableAPITest {
 
 		hTable.close();
 	}
+	
+	@SuppressWarnings("deprecation")
+	public static void get(String tableName, String rowkey) throws IOException {
+		HTable hTable = getTable(tableName);
+		Get get = new Get(rowkey.getBytes());
+		// get.addColumn("info".getBytes(), "age".getBytes());
+		get.addFamily("info".getBytes());
+		// get.addColumn("info".getBytes(), "name".getBytes());
+		// get.addColumn("info".getBytes(), "age".getBytes());
+		Result result = hTable.get(get);
+		printResult(result);
+		hTable.close();
+	}
+
+	public static void getInBatch(String tableName) throws IOException {
+		HTable hTable = getTable(tableName);
+		List<Get> listsGets = new ArrayList<Get>();
+		Get get1 = new Get("rk001".getBytes());
+		Get get2 = new Get("rk002".getBytes());
+		listsGets.add(get1);
+		listsGets.add(get2);
+
+		Result[] results = hTable.get(listsGets);
+		for (Result result : results) {
+			printResult(result);
+		}
+
+	}
+
+	
+	public static void scanTable(String tableName) throws IOException {
+		Scan scan = new Scan();
+		scan.addFamily("info".getBytes());
+		ResultScanner scanner = table.getScanner(scan);
+		for (Result result : scanner) {
+			printResult(result);
+		}
+	}
+
+	public static void scanTable(String tableName, String startKey) throws IOException {
+		Scan scan = new Scan(Bytes.toBytes(startKey));
+		scan.addFamily("info".getBytes());
+		ResultScanner scanner = table.getScanner(scan);
+		for (Result result : scanner) {
+			printResult(result);
+		}
+	}
+
+	public static void scanTable(String tableName, String startKey, String endKey) throws IOException {
+		Scan scan = new Scan(Bytes.toBytes(startKey), Bytes.toBytes(endKey));
+		scan.addFamily("info".getBytes());
+		ResultScanner scanner = table.getScanner(scan);
+		for (Result result : scanner) {
+			printResult(result);
+		}
+	}
+	
+	public static void scanTableByFamily(String tableName, String family) throws IOException {
+		Scan scan = new Scan();
+		scan.addFamily(Bytes.toBytes(family));
+		ResultScanner scanner = table.getScanner(scan);
+		for (Result result : scanner) {
+			printResult(result);
+		}
+	}
+	
+	public static void scanTableByQualifier(String tableName, String family, String qualifier) throws IOException {
+		Scan scan = new Scan();
+		scan.addColumn(Bytes.toBytes(family), Bytes.toBytes(qualifier));
+		ResultScanner scanner = table.getScanner(scan);
+		for (Result result : scanner) {
+			printResult(result);
+		}
+	}
+	public static void scanTableByFilter(String tableName, Filter filter) throws IOException {
+		Scan scan = new Scan();
+		scan.setFilter(filter);
+		ResultScanner scanner = table.getScanner(scan);
+		for (Result result : scanner) {
+			printResult(result);
+		}
+	}
 
 	public static void delete(String tableName, String rowkey)
 			throws IOException {
@@ -226,46 +307,6 @@ public class HBaseTableAPITest {
 
 	}
 
-	@SuppressWarnings("deprecation")
-	public static void get(String tableName, String rowkey) throws IOException {
-		HTable hTable = getTable(tableName);
-		Get get = new Get(rowkey.getBytes());
-		// get.addColumn("info".getBytes(), "age".getBytes());
-		get.addFamily("info".getBytes());
-		// get.addColumn("info".getBytes(), "name".getBytes());
-		// get.addColumn("info".getBytes(), "age".getBytes());
-		Result result = hTable.get(get);
-		printResult(result);
-		hTable.close();
-	}
-
-	public static void getInBatch(String tableName) throws IOException {
-		HTable hTable = getTable(tableName);
-		List<Get> listsGets = new ArrayList<Get>();
-		Get get1 = new Get("rk001".getBytes());
-		Get get2 = new Get("rk002".getBytes());
-		listsGets.add(get1);
-		listsGets.add(get2);
-
-		Result[] results = hTable.get(listsGets);
-		for (Result result : results) {
-			printResult(result);
-		}
-
-		hTable.close();
-	}
-
-	public static void scanTable(String tableName) throws IOException {
-		HTable hTable = getTable(tableName);
-		Scan scan = new Scan();
-		scan.addFamily("info".getBytes());
-		ResultScanner scanner = hTable.getScanner(scan);
-		for (Result result : scanner) {
-			printResult(result);
-		}
-
-		hTable.close();
-	}
 
 	public static void filterByRowKey(String filterName) throws IOException {
 		HTable table = getTable(TABLE_NAME);
@@ -308,38 +349,23 @@ public class HBaseTableAPITest {
 
 	public static void printResult(Result rs) {
 		System.out.println("rowkey is :" + new String(rs.getRow()));
-		System.out.println("rowkey is :" + rs.size());
-		System.out.println(new String(rs.getValue("info".getBytes(), "age".getBytes())));
 		List<Cell> lists = rs.listCells();
-		for (Cell cell : lists) {
-			System.out.println(new String(cell.getRowArray()));
-			System.out.println(new String(cell.getValueArray()));
-		}
-		
-//		System.out.println("rowkey" + "\t\t" + "family:column"
-//				+ "\t " + "value");
-//		
-//		for (Cell cell : rs.rawCells()) {
-//			System.out.println(new String(CellUtil.cloneRow(cell)) + "\t\t"
-//					+ new String(CellUtil.cloneFamily(cell)) + ":"
-//					+ new String(CellUtil.cloneQualifier(cell)) + "\t"
-//					+ new String(CellUtil.cloneValue(cell)));
+//		for (Cell cell : lists) {
+//			System.out.println(new String(cell.getRowArray()));
+//			System.out.println(new String(cell.getValueArray()));
 //		}
-
-	}
-
-	public static void printConfiguration() throws MasterNotRunningException, ZooKeeperConnectionException, IOException {
-		init();
-		System.out.println(configuration.get("hbase.master.maxclockskew"));
 		
+		System.out.println("rowkey" + "\t\t" + "family:column"
+				+ "\t " + "value");
+		
+		for (Cell cell : rs.rawCells()) {
+			System.out.println(new String(CellUtil.cloneRow(cell)) + "\t\t"
+					+ new String(CellUtil.cloneFamily(cell)) + ":"
+					+ new String(CellUtil.cloneQualifier(cell)) + "\t"
+					+ new String(CellUtil.cloneValue(cell)));
+		}
 
 	}
-	
-	private static void isAutoFlush() throws MasterNotRunningException, ZooKeeperConnectionException, IOException {
-		init();
-		HTable table = getTable(TABLE_NAME);
-		table.setAutoFlush(false);
-		System.out.println(table.isAutoFlush());
-		
-	}
+
+
 }
